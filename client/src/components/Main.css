@@ -1,0 +1,67 @@
+/* Main.css */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f4f4;
+}
+
+/* Container takes full height */
+.main-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 16px;
+  width: 1300px;
+}
+
+/* Header bar */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #007bff;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+/* Body takes remaining space */
+.body {
+  flex: 1;                 /* expand to fill */
+  width: 100%;     
+  width: 1200px;        /* full width */     /* limit if you don’t want too wide */
+  margin: 0 auto;          /* center horizontally */
+  background: #fff;
+  padding: 20px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* Messages list */
+.messages {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.message {
+  border: 1px solid #e0e0e0;
+  background: #fafafa;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.message strong {
+  color: #333;
+}
+
+.message small {
+  color: #777;
+  font-size: 0.85em;
+}
