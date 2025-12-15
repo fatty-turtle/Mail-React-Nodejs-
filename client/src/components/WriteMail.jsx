@@ -18,17 +18,18 @@ export default function WriteMail() {
     }
 
     try {
+      const formData = new FormData();
+      formData.append("receiverEmail", to);
+      formData.append("subject", subject);
+      formData.append("body", body);
+      if (file) {
+        formData.append("attachment", file);
+      }
+
       const res = await fetch("http://localhost:3000/api/messages", {
         method: "POST",
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          receiverEmail: to, // match backend name
-          subject,
-          body,
-        }),
+        body: formData,
       });
 
       const data = await res.json();

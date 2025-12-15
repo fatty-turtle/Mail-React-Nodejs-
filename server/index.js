@@ -3,8 +3,26 @@ import cors from "cors";
 import bcrypt from "bcrypt";
 import { getDB, initDB } from "./initialize.js";
 import session from "express-session";
+import multer from "multer";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/");
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
+
+const upload = multer({ storage: storage });
 
 app.use(
   cors({
@@ -13,6 +31,7 @@ app.use(
   })
 );
 app.use(express.json());
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use(
   session({
@@ -143,13 +162,14 @@ app.get("/api/messages", authMiddleware, async (req, res) => {
   try {
     const db = getDB();
     const [rows] = await db.query(
-      `SELECT m.id, m.subject, m.body, u.name AS sender_name, m.created_at
+      `SELECT m.id, m.subject, m.body, m.sender_id, m.receiver_id, u.name AS sender_name, r.name AS receiver_name, m.created_at
        FROM messages m
        JOIN users u ON m.sender_id = u.id
-       WHERE m.receiver_id = ?
+       JOIN users r ON m.receiver_id = r.id
+       WHERE (m.sender_id = ? AND m.sender_deleted = 0) OR (m.receiver_id = ? AND m.receiver_deleted = 0)
        ORDER BY m.created_at DESC
-       LIMIT 5`,
-      [req.session.userId]
+       LIMIT 10`,
+      [req.session.userId, req.session.userId]
     );
 
     res.json({ success: true, messages: rows });
@@ -163,14 +183,14 @@ app.get("/api/messages/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
     const [rows] = await getDB().query(
-      `SELECT m.*, 
-              s.name AS sender_name, 
+      `SELECT m.*,
+              s.name AS sender_name,
               r.name AS receiver_name
        FROM messages m
        JOIN users s ON m.sender_id = s.id
        JOIN users r ON m.receiver_id = r.id
-       WHERE m.id = ? AND m.receiver_id = ?`,
-      [id, req.session.userId]
+       WHERE m.id = ? AND (m.sender_id = ? OR m.receiver_id = ?)`,
+      [id, req.session.userId, req.session.userId]
     );
 
     if (rows.length === 0) {
@@ -183,36 +203,96 @@ app.get("/api/messages/:id", authMiddleware, async (req, res) => {
   }
 });
 
-app.post("/api/messages", authMiddleware, async (req, res) => {
+app.post(
+  "/api/messages",
+  authMiddleware,
+  upload.single("attachment"),
+  async (req, res) => {
+    try {
+      const { receiverEmail, subject, body } = req.body;
+      const db = getDB();
+
+      // Validate input
+      if (!receiverEmail || !body) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Receiver and body are required" });
+      }
+
+      // Find receiver by email
+      const [receiver] = await db.query(
+        "SELECT id FROM users WHERE email = ?",
+        [receiverEmail]
+      );
+
+      if (receiver.length === 0) {
+        return res.json({ success: false, message: "Receiver not found" });
+      }
+
+      const attachmentPath = req.file ? req.file.filename : null;
+
+      await db.query(
+        "INSERT INTO messages (sender_id, receiver_id, subject, body, attachment_path, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+        [
+          req.session.userId,
+          receiver[0].id,
+          subject || "",
+          body,
+          attachmentPath,
+        ]
+      );
+
+      res.json({ success: true, message: "Message sent successfully" });
+    } catch (err) {
+      console.error("Send message error:", err.message);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  }
+);
+
+app.delete("/api/messages/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
   try {
-    const { receiverEmail, subject, body } = req.body;
     const db = getDB();
 
-    // Validate input
-    if (!receiverEmail || !body) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Receiver and body are required" });
-    }
-
-    // Find receiver by email
-    const [receiver] = await db.query("SELECT id FROM users WHERE email = ?", [
-      receiverEmail,
-    ]);
-
-    if (receiver.length === 0) {
-      return res.json({ success: false, message: "Receiver not found" });
-    }
-
-    await db.query(
-      "INSERT INTO messages (sender_id, receiver_id, subject, body, created_at) VALUES (?, ?, ?, ?, NOW())",
-      [req.session.userId, receiver[0].id, subject || "", body]
+    // Check if the message exists and get sender/receiver info
+    const [messageRows] = await db.query(
+      "SELECT sender_id, receiver_id FROM messages WHERE id = ?",
+      [id]
     );
 
-    res.json({ success: true, message: "Message sent successfully" });
+    if (messageRows.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Message not found" });
+    }
+
+    const message = messageRows[0];
+    const userId = req.session.userId;
+
+    // Determine if user is sender or receiver
+    if (userId === message.sender_id) {
+      // User is sender, mark as sender_deleted
+      await db.query("UPDATE messages SET sender_deleted = 1 WHERE id = ?", [
+        id,
+      ]);
+    } else if (userId === message.receiver_id) {
+      // User is receiver, mark as receiver_deleted
+      await db.query("UPDATE messages SET receiver_deleted = 1 WHERE id = ?", [
+        id,
+      ]);
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized to delete this message",
+      });
+    }
+
+    res.json({ success: true, message: "Message deleted successfully" });
   } catch (err) {
-    console.error("Send message error:", err.message);
+    console.error("Delete message error:", err.message);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
 app.listen(3000, () => console.log(`Server running on http://localhost:3000`));

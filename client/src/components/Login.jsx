@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import './Login.css'; 
+import "./Login.css";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -14,7 +14,7 @@ export default function Login() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
-      credentials: "include"
+      credentials: "include",
     });
 
     const data = await res.json();
@@ -45,6 +45,10 @@ export default function Login() {
         />
         <button type="submit">Login</button>
       </form>
+      <p>
+        Don't have an account?{" "}
+        <button onClick={() => navigate("/register")}>Register</button>
+      </p>
     </div>
   );
 }

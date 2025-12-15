@@ -39,16 +39,26 @@ export default function Letter() {
         <hr />
         <p>{letter.body}</p>
         {letter.attachment_path && (
-          <p>
-            📎{" "}
-            <a
-              href={`http://localhost:3000/${letter.attachment_path}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Download attachment
-            </a>
-          </p>
+          <div>
+            {/\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(letter.attachment_path) ? (
+              <img
+                src={`http://localhost:3000/uploads/${letter.attachment_path}`}
+                alt="Attachment"
+                style={{ maxWidth: "100%", height: "auto" }}
+              />
+            ) : (
+              <p>
+                📎{" "}
+                <a
+                  href={`http://localhost:3000/uploads/${letter.attachment_path}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Download attachment
+                </a>
+              </p>
+            )}
+          </div>
         )}
       </div>
     </>
